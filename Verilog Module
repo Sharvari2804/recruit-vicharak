@@ -1,0 +1,115 @@
+module i2c_address_translate(
+    input clk,
+    input rst,
+    input sda_in,
+    input scl_in,
+    output reg sda_out,
+    output reg scl_out,
+    input [6:0] new_id,
+    input [6:0] old_id
+);
+
+reg [3:0] step_now;
+reg [7:0] data_read;
+reg [7:0] data_send;
+reg [3:0] bit_pos;
+reg rw_bit;
+reg read_mode;
+reg write_mode;
+reg start_seen;
+
+always @(posedge clk or posedge rst) begin
+    if (rst) begin
+        step_now   <= 0;
+        data_read  <= 0;
+        data_send  <= 0;
+        bit_pos    <= 0;
+        rw_bit     <= 0;
+        read_mode  <= 0;
+        write_mode <= 0;
+        start_seen <= 0;
+        sda_out    <= 1;
+        scl_out    <= 1;
+    end 
+    else begin
+
+        case(step_now)
+
+        0: begin
+            if (sda_in==0 && scl_in==1) begin
+                start_seen <= 1;
+                if (start_seen) begin
+                    bit_pos <= 0;
+                    step_now <= 1;
+                end
+            end
+        end
+
+        1: begin
+            if (scl_in==1) begin
+                data_read[7-bit_pos] <= sda_in;
+                bit_pos <= bit_pos + 1;
+                if (bit_pos==7)
+                    step_now <= 2;
+            end
+        end
+
+        2: begin
+            rw_bit <= sda_in;
+            if (data_read[7:1] == old_id)
+                data_send <= {new_id, rw_bit};
+            else
+                data_send <= data_read;
+            bit_pos <= 0;
+            step_now <= 3;
+        end
+
+        3: begin
+            if (scl_in==0) begin
+                sda_out <= data_send[7-bit_pos];
+                bit_pos <= bit_pos + 1;
+                if (bit_pos==7)
+                    step_now <= 4;
+            end
+        end
+
+        4: begin
+            if (rw_bit==1)
+                read_mode <= 1;
+            else
+                write_mode <= 1;
+
+            bit_pos <= 0;
+            step_now <= 5;
+        end
+
+        5: begin
+            if (write_mode) begin
+                if (scl_in==1) begin
+                    data_read[7-bit_pos] <= sda_in;
+                    bit_pos <= bit_pos + 1;
+                    if (bit_pos==7)
+                        step_now <= 6;
+                end
+            end else begin
+                if (scl_in==0) begin
+                    sda_out <= data_send[7-bit_pos];
+                    bit_pos <= bit_pos + 1;
+                    if (bit_pos==7)
+                        step_now <= 6;
+                end
+            end
+        end
+
+        6: begin
+            read_mode  <= 0;
+            write_mode <= 0;
+            start_seen <= 0;
+            step_now   <= 0;
+        end
+
+        endcase
+    end
+end
+
+endmodule
