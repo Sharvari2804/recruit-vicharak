@@ -1,0 +1,110 @@
+module tb_i2c_address_translate;
+
+reg clk;
+reg rst;
+reg sda_line;
+reg scl_line;
+wire sda_out_line;
+wire scl_out_line;
+
+reg [6:0] new_addr;
+reg [6:0] old_addr;
+
+i2c_address_translate dut(
+    .clk(clk),
+    .rst(rst),
+    .sda_in(sda_line),
+    .scl_in(scl_line),
+    .sda_out(sda_out_line),
+    .scl_out(scl_out_line),
+    .new_id(new_addr),
+    .old_id(old_addr)
+);
+
+reg [7:0] send_bits;
+integer i;
+
+always #6 clk = ~clk;
+
+initial begin
+    clk = 0;
+    rst = 1;
+    sda_line = 1;
+    scl_line = 1;
+
+    new_addr = 7'h52;
+    old_addr = 7'h39;
+
+    #35 rst = 0;
+
+    #30 do_addr_w;
+    #100 put_byte(8'hA4);
+    #140 do_addr_r;
+
+    #280 $stop;
+end
+
+task do_addr_w;
+begin
+    sda_line = 1;
+    scl_line = 1;
+    #20;
+    sda_line = 0;
+    #20;
+    scl_line = 0;
+
+    send_bits = {old_addr,1'b0};
+
+    for (i=0; i<8; i=i+1) begin
+        sda_line = send_bits[7-i];
+        #20 scl_line = 1;
+        #20 scl_line = 0;
+    end
+
+    sda_line = 1;
+end
+endtask
+
+task do_addr_r;
+begin
+    sda_line = 1;
+    scl_line = 1;
+    #20;
+    sda_line = 0;
+    #20;
+    scl_line = 0;
+
+    send_bits = {old_addr,1'b1};
+
+    for (i=0; i<8; i=i+1) begin
+        sda_line = send_bits[7-i];
+        #20 scl_line = 1;
+        #20 scl_line = 0;
+    end
+
+    sda_line = 1;
+end
+endtask
+
+task put_byte(input [7:0] data_in);
+begin
+    send_bits = data_in;
+
+    for (i=0; i<8; i=i+1) begin
+        sda_line = send_bits[7-i];
+        #10 scl_line = 1;
+        #10 scl_line = 0;
+    end
+
+    sda_line = 1;
+end
+  
+endtask
+  
+  initial begin
+    $dumpfile("waveform.vcd");
+    $dumpvars(0, tb_i2c_address_translate);   
+end
+
+
+endmodule
